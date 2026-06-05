@@ -6,17 +6,29 @@ const DEFAULT_KEYWORDS = [
 
 let filterEnabled = true;
 let keywords = [];
-let patterns = [];
-let sessionHits = {};   // resets on fullRescan / page load
-let lifetimeHits = {};  // persisted, never reset (except on keyword remove)
+let asciiKeywords = [];      // ASCII keywords in declaration order
+let nonAsciiKeywords = [];   // Hebrew/etc. in declaration order
+let asciiCombinedRegex = null;  // single regex for all ASCII, captures the matched word
+let sessionHits = {};
+let lifetimeHits = {};
+
+function isAscii(s) { return /^[\x00-\x7F]+$/.test(s); }
+function escapeRegex(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
 function buildPatterns(kws) {
   keywords = kws;
-  patterns = kws.map(kw => {
-    const isAscii = /^[\x00-\x7F]+$/.test(kw);
-    const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return isAscii ? new RegExp(`\\b${escaped}\\b`, 'i') : new RegExp(escaped);
-  });
+  asciiKeywords    = kws.filter(isAscii);
+  nonAsciiKeywords = kws.filter(k => !isAscii(k));
+
+  // Combine all ASCII keywords into one alternation regex with whole-word boundaries.
+  // Sort by length desc so 'agents' matches before 'agent' inside the alternation.
+  if (asciiKeywords.length) {
+    const alts = [...asciiKeywords].sort((a, b) => b.length - a.length).map(escapeRegex).join('|');
+    asciiCombinedRegex = new RegExp(`\\b(${alts})\\b`, 'i');
+  } else {
+    asciiCombinedRegex = null;
+  }
+
   // Drop counts for removed keywords; preserve counts for surviving ones
   const next = {};
   const nextLifetime = {};
@@ -55,10 +67,36 @@ function findFeedList() {
   return null;
 }
 
+// Walk text nodes inside the post, skipping subtrees that look like comments.
+// Avoids cloneNode(true) which is expensive on rich posts (images, embeds, reactions).
 function getPostBodyText(postRoot) {
-  const clone = postRoot.cloneNode(true);
-  clone.querySelectorAll('section, [class*="comment"], [id*="comment"]').forEach(el => el.remove());
-  return clone.textContent;
+  const skip = new Set();
+  postRoot.querySelectorAll('section, [class*="comment"], [id*="comment"]').forEach(el => skip.add(el));
+
+  let text = '';
+  const walker = document.createTreeWalker(postRoot, NodeFilter.SHOW_TEXT, {
+    acceptNode(node) {
+      // Reject text nodes whose ancestor (within the post) is a comments subtree
+      for (let p = node.parentNode; p && p !== postRoot; p = p.parentNode) {
+        if (skip.has(p)) return NodeFilter.FILTER_REJECT;
+      }
+      return NodeFilter.FILTER_ACCEPT;
+    },
+  });
+  while (walker.nextNode()) text += walker.currentNode.nodeValue + ' ';
+  return text;
+}
+
+// Returns the matched keyword (string) or null
+function matchKeyword(text) {
+  if (asciiCombinedRegex) {
+    const m = asciiCombinedRegex.exec(text);
+    if (m) return asciiKeywords.find(k => k.toLowerCase() === m[1].toLowerCase()) ?? m[1];
+  }
+  for (const kw of nonAsciiKeywords) {
+    if (text.includes(kw)) return kw;
+  }
+  return null;
 }
 
 function scan() {
@@ -72,11 +110,10 @@ function scan() {
     post.setAttribute('data-ai-scanned', '1');
 
     const text = getPostBodyText(post);
-    const matchIdx = patterns.findIndex(p => p.test(text));
-    if (matchIdx !== -1) {
+    const kw = matchKeyword(text);
+    if (kw) {
       post.setAttribute('data-ai-hidden', '1');
       post.style.display = 'none';
-      const kw = keywords[matchIdx];
       sessionHits[kw]  = (sessionHits[kw]  ?? 0) + 1;
       lifetimeHits[kw] = (lifetimeHits[kw] ?? 0) + 1;
       changed = true;
@@ -86,7 +123,6 @@ function scan() {
 }
 
 function fullRescan() {
-  // Reset session counts only; lifetime counts are preserved
   sessionHits = Object.fromEntries(keywords.map(kw => [kw, 0]));
   document.querySelectorAll('[data-ai-scanned]').forEach(p => {
     p.removeAttribute('data-ai-scanned');
@@ -94,7 +130,6 @@ function fullRescan() {
     p.style.display = '';
   });
   scan();
-  // Force flush so badge updates immediately on user-initiated changes
   if (pendingFlush !== null) { clearTimeout(pendingFlush); pendingFlush = null; }
   flushBadge();
 }
@@ -132,35 +167,40 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   return true;
 });
 
-// Two observers: bootstrap watches body until the feed list mounts; once we have
-// it, narrow the scope to the feed itself to avoid waking on chat/notification
-// mutations elsewhere on the page.
+// Feed-scoped observer; no subtree listening on body during page load.
 let feedObserver = null;
-let bootstrapObserver = null;
-
-function setupFeedObserver() {
-  const feed = findFeedList();
-  if (!feed || feedObserver) return;
-  feedObserver = new MutationObserver(scheduleScan);
-  feedObserver.observe(feed, { childList: true });
-  if (bootstrapObserver) { bootstrapObserver.disconnect(); bootstrapObserver = null; }
-}
-
 let scanScheduled = false;
+
 function scheduleScan() {
   if (scanScheduled) return;
   scanScheduled = true;
-  const cb = () => { scanScheduled = false; scan(); setupFeedObserver(); };
+  const cb = () => { scanScheduled = false; scan(); };
   if (window.requestIdleCallback) requestIdleCallback(cb, { timeout: 500 });
   else setTimeout(cb, 250);
 }
 
-bootstrapObserver = new MutationObserver(scheduleScan);
-bootstrapObserver.observe(document.body, { childList: true, subtree: true });
+function setupFeedObserver() {
+  if (feedObserver) return;
+  const feed = findFeedList();
+  if (!feed) return;
+  feedObserver = new MutationObserver(scheduleScan);
+  feedObserver.observe(feed, { childList: true });
+}
+
+// Idle-poll for the feed instead of subtree-observing body — avoids being woken
+// by every DOM mutation during LinkedIn's heavy initial render.
+function waitForFeed() {
+  if (findFeedList()) {
+    setupFeedObserver();
+    scan();
+    return;
+  }
+  if (window.requestIdleCallback) requestIdleCallback(waitForFeed, { timeout: 1000 });
+  else setTimeout(waitForFeed, 500);
+}
 
 chrome.storage.local.get(['keywords', 'lifetimeHits'], ({ keywords: kws, lifetimeHits: lt }) => {
   lifetimeHits = lt ?? {};
   buildPatterns(kws ?? DEFAULT_KEYWORDS);
-  scan();
-  setupFeedObserver();
+  waitForFeed();
 });
