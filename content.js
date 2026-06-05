@@ -167,10 +167,11 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   return true;
 });
 
-// Feed-scoped observer; no subtree listening on body during page load.
-let feedObserver = null;
+// Single body-subtree observer. SPA navigations and LinkedIn's re-renders can
+// detach and re-mount the feed list, so we can't rely on a feed-scoped observer
+// alone. Instead we observe the body but defer all real work to idle time, so
+// mutation noise is cheap.
 let scanScheduled = false;
-
 function scheduleScan() {
   if (scanScheduled) return;
   scanScheduled = true;
@@ -179,28 +180,10 @@ function scheduleScan() {
   else setTimeout(cb, 250);
 }
 
-function setupFeedObserver() {
-  if (feedObserver) return;
-  const feed = findFeedList();
-  if (!feed) return;
-  feedObserver = new MutationObserver(scheduleScan);
-  feedObserver.observe(feed, { childList: true });
-}
-
-// Idle-poll for the feed instead of subtree-observing body — avoids being woken
-// by every DOM mutation during LinkedIn's heavy initial render.
-function waitForFeed() {
-  if (findFeedList()) {
-    setupFeedObserver();
-    scan();
-    return;
-  }
-  if (window.requestIdleCallback) requestIdleCallback(waitForFeed, { timeout: 1000 });
-  else setTimeout(waitForFeed, 500);
-}
+new MutationObserver(scheduleScan).observe(document.body, { childList: true, subtree: true });
 
 chrome.storage.local.get(['keywords', 'lifetimeHits'], ({ keywords: kws, lifetimeHits: lt }) => {
   lifetimeHits = lt ?? {};
   buildPatterns(kws ?? DEFAULT_KEYWORDS);
-  waitForFeed();
+  scan();
 });
