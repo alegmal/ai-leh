@@ -8,7 +8,7 @@ let filterEnabled = true;
 let keywords = [];
 let patterns = [];
 let sessionHits = {};   // resets on fullRescan / page load
-let lifetimeHits = {};  // persisted, never reset
+let lifetimeHits = {};  // persisted, never reset (except on keyword remove)
 
 function buildPatterns(kws) {
   keywords = kws;
@@ -17,12 +17,21 @@ function buildPatterns(kws) {
     const escaped = kw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     return isAscii ? new RegExp(`\\b${escaped}\\b`, 'i') : new RegExp(escaped);
   });
-  // Keep existing session/lifetime counts for keywords that still exist
-  sessionHits  = Object.fromEntries(kws.map(kw => [kw, sessionHits[kw]  ?? 0]));
-  lifetimeHits = Object.fromEntries(kws.map(kw => [kw, lifetimeHits[kw] ?? 0]));
+  // Drop counts for removed keywords; preserve counts for surviving ones
+  const next = {};
+  const nextLifetime = {};
+  for (const kw of kws) {
+    next[kw]         = sessionHits[kw]  ?? 0;
+    nextLifetime[kw] = lifetimeHits[kw] ?? 0;
+  }
+  sessionHits  = next;
+  lifetimeHits = nextLifetime;
 }
 
-function updateBadge() {
+// Debounced storage writes — coalesces bursts of matches during fast scrolls
+let pendingFlush = null;
+function flushBadge() {
+  pendingFlush = null;
   try {
     chrome.storage.local.set({
       hiddenCount: document.querySelectorAll('[data-ai-hidden]').length,
@@ -31,6 +40,10 @@ function updateBadge() {
       lifetimeHits,
     });
   } catch (_) {}
+}
+function updateBadge() {
+  if (pendingFlush !== null) return;
+  pendingFlush = setTimeout(flushBadge, 300);
 }
 
 function findFeedList() {
@@ -81,20 +94,22 @@ function fullRescan() {
     p.style.display = '';
   });
   scan();
-  updateBadge();
+  // Force flush so badge updates immediately on user-initiated changes
+  if (pendingFlush !== null) { clearTimeout(pendingFlush); pendingFlush = null; }
+  flushBadge();
 }
 
 function enable() {
   filterEnabled = true;
   document.querySelectorAll('[data-ai-hidden]').forEach(p => { p.style.display = 'none'; });
   scan();
-  updateBadge();
+  flushBadge();
 }
 
 function disable() {
   filterEnabled = false;
   document.querySelectorAll('[data-ai-hidden]').forEach(p => { p.style.display = ''; });
-  updateBadge();
+  flushBadge();
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -117,16 +132,35 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   return true;
 });
 
-function debounce(fn, ms) {
-  let timer;
-  return () => { clearTimeout(timer); timer = setTimeout(fn, ms); };
+// Two observers: bootstrap watches body until the feed list mounts; once we have
+// it, narrow the scope to the feed itself to avoid waking on chat/notification
+// mutations elsewhere on the page.
+let feedObserver = null;
+let bootstrapObserver = null;
+
+function setupFeedObserver() {
+  const feed = findFeedList();
+  if (!feed || feedObserver) return;
+  feedObserver = new MutationObserver(scheduleScan);
+  feedObserver.observe(feed, { childList: true });
+  if (bootstrapObserver) { bootstrapObserver.disconnect(); bootstrapObserver = null; }
 }
 
-new MutationObserver(debounce(scan, 250)).observe(document.body, { childList: true, subtree: true });
+let scanScheduled = false;
+function scheduleScan() {
+  if (scanScheduled) return;
+  scanScheduled = true;
+  const cb = () => { scanScheduled = false; scan(); setupFeedObserver(); };
+  if (window.requestIdleCallback) requestIdleCallback(cb, { timeout: 500 });
+  else setTimeout(cb, 250);
+}
 
-// Load keywords + lifetime hits from storage; session always starts at 0
+bootstrapObserver = new MutationObserver(scheduleScan);
+bootstrapObserver.observe(document.body, { childList: true, subtree: true });
+
 chrome.storage.local.get(['keywords', 'lifetimeHits'], ({ keywords: kws, lifetimeHits: lt }) => {
   lifetimeHits = lt ?? {};
   buildPatterns(kws ?? DEFAULT_KEYWORDS);
   scan();
+  setupFeedObserver();
 });

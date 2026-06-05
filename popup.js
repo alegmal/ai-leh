@@ -33,8 +33,8 @@ function makeCount(cls, value) {
 
 function sum(obj) { return Object.values(obj).reduce((a, b) => a + b, 0); }
 
-function renderKeywords(keywords) {
-  allKeywords = keywords;
+function renderKeywords(kws) {
+  allKeywords = kws;
 
   const sessionTotal  = sum(sessionHits);
   const lifetimeTotal = sum(lifetimeHits);
@@ -42,7 +42,7 @@ function renderKeywords(keywords) {
   document.getElementById('legend-lifetime').textContent = `lifetime ${lifetimeTotal}`;
 
   const q = searchInput.value.trim().toLowerCase();
-  const visible = q ? keywords.filter(k => k.toLowerCase().includes(q)) : keywords;
+  const visible = q ? kws.filter(k => k.toLowerCase().includes(q)) : kws;
   kwList.innerHTML = '';
   visible.forEach(kw => {
     const li  = document.createElement('li');
@@ -68,12 +68,31 @@ function withActiveTab(cb) {
   chrome.tabs.query({ active: true, currentWindow: true }, tabs => cb(tabs[0]));
 }
 
-function saveKeywords(keywords) {
-  chrome.storage.local.set({ keywords }, () => {
-    withActiveTab(tab => {
-      chrome.tabs.sendMessage(tab.id, { action: 'keywordsUpdated', keywords });
-    });
-  });
+function saveKeywords(kws) {
+  // Drop hit counts for removed keywords so they don't accumulate across edits
+  const nextSession  = {};
+  const nextLifetime = {};
+  for (const k of kws) {
+    nextSession[k]  = sessionHits[k]  ?? 0;
+    nextLifetime[k] = lifetimeHits[k] ?? 0;
+  }
+  sessionHits  = nextSession;
+  lifetimeHits = nextLifetime;
+
+  chrome.storage.local.set(
+    { keywords: kws, sessionHits, lifetimeHits },
+    () => {
+      // Notify the LinkedIn tab(s) so they rebuild patterns and rescan
+      chrome.tabs.query({ url: 'https://www.linkedin.com/*' }, tabs => {
+        for (const tab of tabs) {
+          chrome.tabs.sendMessage(tab.id, { action: 'keywordsUpdated', keywords: kws }, () => {
+            // Swallow lastError if no content script is present on that tab
+            void chrome.runtime.lastError;
+          });
+        }
+      });
+    },
+  );
 }
 
 function removeKeyword(kw) {
