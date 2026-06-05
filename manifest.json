@@ -3,7 +3,8 @@
   "name": "AI Leh",
   "version": "1.0",
   "description": "Hides AI-related posts from your LinkedIn feed",
-  "permissions": ["activeTab", "storage", "tabs"],
+  "permissions": ["storage"],
+  "host_permissions": ["https://www.linkedin.com/*"],
   "background": {
     "service_worker": "background.js"
   },
