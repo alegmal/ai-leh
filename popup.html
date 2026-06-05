@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    /* ── Theme variables ── */
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+      width: 240px;
+      padding: 16px;
+      margin: 0;
+      transition: background 0.2s, color 0.2s;
+    }
+    body.dark {
+      background: #0d1b2a;
+      color: #e8edf2;
+      --c-title:       #e8edf2;
+      --c-stat:        #ff6b6b;
+      --c-muted:       #8a9bb0;
+      --c-label:       #e8edf2;
+      --c-hr:          #1e3048;
+      --c-li-border:   #1e3048;
+      --c-li-text:     #e8edf2;
+      --c-rm-btn:      #3a5068;
+      --c-rm-hover:    #ff6b6b;
+      --c-input-bg:    #0d1b2a;
+      --c-input-fg:    #e8edf2;
+      --c-input-bdr:   #1e3048;
+      --c-placeholder: #3a5068;
+      --c-status:      #3a5068;
+      --c-slider-off:  #2a3f55;
+      --c-lifetime:    #3a5068;
+    }
+    body.light {
+      background: #ffffff;
+      color: #1a1a1a;
+      --c-title:       #1a1a1a;
+      --c-stat:        #c00;
+      --c-muted:       #666;
+      --c-label:       #333;
+      --c-hr:          #e0e0e0;
+      --c-li-border:   #f0f0f0;
+      --c-li-text:     #333;
+      --c-rm-btn:      #aaa;
+      --c-rm-hover:    #c00;
+      --c-input-bg:    #fff;
+      --c-input-fg:    #333;
+      --c-input-bdr:   #ccc;
+      --c-placeholder: #aaa;
+      --c-status:      #999;
+      --c-slider-off:  #ccc;
+      --c-lifetime:    #888;
+    }
+
+    /* ── Header row ── */
+    .header-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    h2 {
+      font-size: 14px;
+      margin: 0;
+      color: var(--c-title);
+    }
+    .night-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .night-label {
+      font-size: 11px;
+      color: var(--c-muted);
+    }
+    /* Smaller switch for night mode */
+    .switch-sm {
+      position: relative;
+      width: 32px;
+      height: 18px;
+      flex-shrink: 0;
+    }
+    .switch-sm input { opacity: 0; width: 0; height: 0; }
+    .switch-sm .slider {
+      position: absolute;
+      inset: 0;
+      background: var(--c-slider-off);
+      border-radius: 18px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .switch-sm .slider::before {
+      content: '';
+      position: absolute;
+      width: 12px; height: 12px;
+      left: 3px; top: 3px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform 0.2s;
+      box-shadow: 0 1px 2px rgba(0,0,0,.3);
+    }
+    .switch-sm input:checked + .slider { background: #0a66c2; }
+    .switch-sm input:checked + .slider::before { transform: translateX(14px); }
+
+    #stat {
+      font-size: 14px;
+      font-weight: bold;
+      color: var(--c-stat);
+      margin: 0 0 4px;
+    }
+    #stat-label {
+      font-size: 12px;
+      color: var(--c-muted);
+      margin: 0 0 14px;
+    }
+
+    .toggle-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+    }
+    .toggle-label {
+      font-size: 13px;
+      color: var(--c-label);
+      font-weight: 600;
+    }
+
+    /* iOS-style switch */
+    .switch {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      flex-shrink: 0;
+    }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider {
+      position: absolute;
+      inset: 0;
+      background: var(--c-slider-off);
+      border-radius: 24px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .slider::before {
+      content: '';
+      position: absolute;
+      width: 18px; height: 18px;
+      left: 3px; top: 3px;
+      background: #fff;
+      border-radius: 50%;
+      transition: transform 0.2s;
+      box-shadow: 0 1px 3px rgba(0,0,0,.4);
+    }
+    input:checked + .slider { background: #0a66c2; }
+    input:checked + .slider::before { transform: translateX(20px); }
+    input:disabled + .slider { opacity: 0.4; cursor: default; }
+
+    hr {
+      border: none;
+      border-top: 1px solid var(--c-hr);
+      margin: 0 0 12px;
+    }
+    h3 {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--c-muted);
+      margin: 0;
+      text-transform: uppercase;
+      letter-spacing: .04em;
+    }
+
+    #keyword-list {
+      list-style: none;
+      margin: 0 0 8px;
+      padding: 0;
+      max-height: 140px;
+      overflow-y: auto;
+    }
+    #keyword-list li {
+      display: flex;
+      align-items: center;
+      font-size: 12px;
+      padding: 4px 0;
+      border-bottom: 1px solid var(--c-li-border);
+      color: var(--c-li-text);
+      gap: 4px;
+    }
+    #keyword-list li:last-child { border-bottom: none; }
+    #keyword-list li .kw-text { flex: 1; }
+    #keyword-list li .kw-count {
+      font-size: 11px;
+      color: #fff;
+      border-radius: 8px;
+      padding: 1px 5px;
+      min-width: 16px;
+      text-align: center;
+      display: none;
+    }
+    #keyword-list li .kw-count.has-hits { display: inline-block; }
+    .kw-count.session  { background: #0a66c2; }
+    .kw-count.lifetime { background: var(--c-lifetime); }
+    #keyword-list button {
+      background: none;
+      border: none;
+      color: var(--c-rm-btn);
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+      padding: 0 2px;
+    }
+    #keyword-list button:hover { color: var(--c-rm-hover); }
+
+    .add-row {
+      display: flex;
+      gap: 6px;
+    }
+    .add-row input {
+      flex: 1;
+      font-size: 12px;
+      padding: 5px 7px;
+      border: 1px solid var(--c-input-bdr);
+      border-radius: 5px;
+      outline: none;
+      background: var(--c-input-bg);
+      color: var(--c-input-fg);
+    }
+    .add-row input::placeholder { color: var(--c-placeholder); }
+    .add-row input:focus { border-color: #0a66c2; }
+    .add-row button {
+      font-size: 18px;
+      line-height: 1;
+      padding: 0 8px;
+      background: #0a66c2;
+      color: #fff;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    .add-row button:hover { background: #1476d1; }
+
+    #search-keyword {
+      width: 100%;
+      box-sizing: border-box;
+      font-size: 12px;
+      padding: 5px 7px;
+      border: 1px solid var(--c-input-bdr);
+      border-radius: 5px;
+      margin-bottom: 6px;
+      outline: none;
+      background: var(--c-input-bg);
+      color: var(--c-input-fg);
+    }
+    #search-keyword::placeholder { color: var(--c-placeholder); }
+
+    #status {
+      font-size: 11px;
+      color: var(--c-status);
+      text-align: right;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body class="light">
+  <div class="header-row">
+    <h2>AI Leh</h2>
+    <div class="night-row">
+      <span class="night-label">Night mode</span>
+      <label class="switch-sm">
+        <input type="checkbox" id="theme-toggle">
+        <span class="slider"></span>
+      </label>
+    </div>
+  </div>
+
+  <div id="stat">—</div>
+  <div id="stat-label">posts hidden</div>
+
+  <div class="toggle-row">
+    <span class="toggle-label">Filter</span>
+    <label class="switch">
+      <input type="checkbox" id="toggle" checked>
+      <span class="slider"></span>
+    </label>
+  </div>
+
+  <hr>
+
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+    <h3>Keywords</h3>
+    <div style="display:flex;gap:6px;align-items:center;">
+      <span id="legend-session"  style="background:#0a66c2;color:#fff;border-radius:8px;padding:1px 6px;font-size:11px;">session</span>
+      <span id="legend-lifetime" style="background:var(--c-lifetime);color:#fff;border-radius:8px;padding:1px 6px;font-size:11px;">lifetime</span>
+    </div>
+  </div>
+  <input type="text" id="search-keyword" placeholder="Search…">
+  <ul id="keyword-list"></ul>
+  <div class="add-row">
+    <input type="text" id="new-keyword" placeholder="Add keyword…">
+    <button id="add-btn">+</button>
+  </div>
+
+  <div id="status">Loading…</div>
+  <script src="popup.js"></script>
+</body>
+</html>
