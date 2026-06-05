@@ -82,11 +82,35 @@ Output goes to `icons/`:
 - `icon16.png`, `icon32.png`, `icon48.png`, `icon128.png` — extension icons
 - `promo440x280.png` — Chrome Web Store promo tile
 
-To package for the Chrome Web Store, zip the repo root **excluding** `generate_icons.py` and `icons/promo440x280.png`:
+### Packaging for the Chrome Web Store
 
+The `.zip` you upload must contain the runtime files only — not the build script, README, promo tile, or `.git`. Use either:
+
+**bash (zip)**
 ```bash
-zip -r ai-leh.zip . -x "*.git*" "generate_icons.py" "icons/promo*" "README.md"
+zip -r ai-leh-v1.0.zip . \
+  -x "*.git*" "generate_icons.py" "icons/promo*" "README.md" "*.zip"
 ```
+
+**python (works in environments without `zip`)**
+```bash
+python3 - <<'EOF'
+import zipfile, os
+EX_F = {'README.md', 'generate_icons.py', '.gitignore'}
+EX_D = {'.git', '__pycache__'}
+EX_P = ('icons/promo',)
+with zipfile.ZipFile('ai-leh-v1.0.zip', 'w', zipfile.ZIP_DEFLATED) as z:
+    for root, dirs, files in os.walk('.'):
+        dirs[:] = [d for d in dirs if d not in EX_D]
+        for f in files:
+            if f in EX_F or f.endswith('.zip'): continue
+            p = os.path.relpath(os.path.join(root, f), '.')
+            if p.startswith(EX_P): continue
+            z.write(p)
+EOF
+```
+
+Resulting zip should contain: `manifest.json`, `content.js`, `background.js`, `popup.html`, `popup.js`, `icons/icon16.png`, `icons/icon32.png`, `icons/icon48.png`, `icons/icon128.png`.
 
 ## Permissions
 
