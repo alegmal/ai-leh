@@ -11,6 +11,15 @@ themeToggle.addEventListener('change', () => {
   chrome.storage.local.set({ theme: next });
 });
 
+// Show count on icon toggle (default: on)
+const badgeToggle = document.getElementById('badge-toggle');
+chrome.storage.local.get('showBadge', ({ showBadge }) => {
+  badgeToggle.checked = showBadge !== false;
+});
+badgeToggle.addEventListener('change', () => {
+  chrome.storage.local.set({ showBadge: badgeToggle.checked });
+});
+
 const stat        = document.getElementById('stat');
 const toggleInput = document.getElementById('toggle');
 const status      = document.getElementById('status');
