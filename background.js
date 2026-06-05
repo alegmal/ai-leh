@@ -23,15 +23,26 @@ function applyBadge(count, show) {
   });
 }
 
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area !== 'local') return;
-
-  const countChanged = 'hiddenCount' in changes;
-  const showChanged  = 'showBadge'   in changes;
-  if (!countChanged && !showChanged) return;
-
-  // Need both values to compute current badge state
+function refreshBadge() {
   chrome.storage.local.get(['hiddenCount', 'showBadge'], data => {
     applyBadge(data.hiddenCount ?? 0, data.showBadge !== false);
   });
+}
+
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area !== 'local') return;
+  if (!('hiddenCount' in changes) && !('showBadge' in changes)) return;
+  refreshBadge();
+});
+
+// The service worker can be killed at any time. Per-tab badge state is lost
+// on worker restart, so re-apply it whenever the worker spins back up.
+chrome.runtime.onStartup.addListener(refreshBadge);
+chrome.runtime.onInstalled.addListener(refreshBadge);
+// Also reapply when a LinkedIn tab finishes loading — the per-tab badge is
+// reset to default when a navigation completes.
+chrome.tabs.onUpdated.addListener((tabId, info, tab) => {
+  if (info.status === 'complete' && tab.url && tab.url.startsWith('https://www.linkedin.com/')) {
+    refreshBadge();
+  }
 });

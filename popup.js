@@ -69,8 +69,10 @@ function renderKeywords(kws) {
 
 function renderState(state) {
   stat.textContent = state.hiddenCount ?? 0;
-  toggleInput.checked = state.enabled !== false;
-  status.textContent = toggleInput.checked ? 'Filtering active' : 'Posts are visible';
+  // Toggle now means "show hidden content" — checked = filter off
+  const filtering = state.enabled !== false;
+  toggleInput.checked = !filtering;
+  status.textContent = filtering ? 'Filtering active' : 'Posts are visible';
 }
 
 function withActiveTab(cb) {
