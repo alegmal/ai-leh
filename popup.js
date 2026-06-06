@@ -11,65 +11,57 @@ themeToggle.addEventListener('change', () => {
   chrome.storage.local.set({ theme: next });
 });
 
-// Show count on icon toggle (default: on)
-const badgeToggle = document.getElementById('badge-toggle');
-chrome.storage.local.get('showBadge', ({ showBadge }) => {
-  badgeToggle.checked = showBadge !== false;
-});
-badgeToggle.addEventListener('change', () => {
-  chrome.storage.local.set({ showBadge: badgeToggle.checked });
-});
+const toggleInput  = document.getElementById('toggle');
+const status       = document.getElementById('status');
+const filteredList = document.getElementById('filtered-list');
 
-const stat        = document.getElementById('stat');
-const toggleInput = document.getElementById('toggle');
-const status      = document.getElementById('status');
-const kwList      = document.getElementById('keyword-list');
-const newKwInput  = document.getElementById('new-keyword');
-const addBtn      = document.getElementById('add-btn');
-const searchInput = document.getElementById('search-keyword');
+// Must match DEFAULT_KEYWORDS in content.js.
+const KEYWORDS = [
+  'agents', 'agent', 'agentic',
+  'artificial intelligence', 'ai', 'llm',
+  'בינה מלאכותית',
+];
 
-let allKeywords = [];
 let sessionHits = {};
 let lifetimeHits = {};
 
-function makeCount(cls, value) {
-  const s = document.createElement('span');
-  s.className = `kw-count ${cls}${value > 0 ? ' has-hits' : ''}`;
-  s.title = cls === 'session' ? 'This session' : 'All time';
-  s.textContent = value;
-  return s;
-}
-
-function sum(obj) { return Object.values(obj).reduce((a, b) => a + b, 0); }
-
-function renderKeywords(kws) {
-  allKeywords = kws;
-
-  const sessionTotal  = sum(sessionHits);
-  const lifetimeTotal = sum(lifetimeHits);
+function renderKeywords() {
+  const sessionTotal  = Object.values(sessionHits).reduce((a, b) => a + b, 0);
+  const lifetimeTotal = Object.values(lifetimeHits).reduce((a, b) => a + b, 0);
   document.getElementById('legend-session').textContent  = `session ${sessionTotal}`;
   document.getElementById('legend-lifetime').textContent = `lifetime ${lifetimeTotal}`;
 
-  const q = searchInput.value.trim().toLowerCase();
-  const visible = q ? kws.filter(k => k.toLowerCase().includes(q)) : kws;
-  kwList.innerHTML = '';
-  visible.forEach(kw => {
-    const li  = document.createElement('li');
+  filteredList.innerHTML = '';
+  for (const kw of KEYWORDS) {
+    const pill = document.createElement('span');
+    pill.className = 'pill';
+
     const txt = document.createElement('span');
-    txt.className = 'kw-text';
     txt.textContent = kw;
-    const btn = document.createElement('button');
-    btn.textContent = '×';
-    btn.title = 'Remove';
-    btn.addEventListener('click', () => removeKeyword(kw));
-    li.append(txt, makeCount('session', sessionHits[kw] ?? 0), makeCount('lifetime', lifetimeHits[kw] ?? 0), btn);
-    kwList.appendChild(li);
-  });
+    pill.appendChild(txt);
+
+    const s = sessionHits[kw]  ?? 0;
+    const l = lifetimeHits[kw] ?? 0;
+    if (s > 0) {
+      const c = document.createElement('span');
+      c.className = 'kw-count session';
+      c.title = 'This session';
+      c.textContent = s;
+      pill.appendChild(c);
+    }
+    if (l > 0) {
+      const c = document.createElement('span');
+      c.className = 'kw-count lifetime';
+      c.title = 'All time';
+      c.textContent = l;
+      pill.appendChild(c);
+    }
+    filteredList.appendChild(pill);
+  }
 }
 
 function renderState(state) {
-  stat.textContent = state.hiddenCount ?? 0;
-  // Toggle now means "show hidden content" — checked = filter off
+  // Toggle means "stop hiding content" — checked = filter off
   const filtering = state.enabled !== false;
   toggleInput.checked = !filtering;
   status.textContent = filtering ? 'Filtering active' : 'Posts are visible';
@@ -78,57 +70,6 @@ function renderState(state) {
 function withActiveTab(cb) {
   chrome.tabs.query({ active: true, currentWindow: true }, tabs => cb(tabs[0]));
 }
-
-function saveKeywords(kws) {
-  // Drop hit counts for removed keywords so they don't accumulate across edits
-  const nextSession  = {};
-  const nextLifetime = {};
-  for (const k of kws) {
-    nextSession[k]  = sessionHits[k]  ?? 0;
-    nextLifetime[k] = lifetimeHits[k] ?? 0;
-  }
-  sessionHits  = nextSession;
-  lifetimeHits = nextLifetime;
-
-  chrome.storage.local.set(
-    { keywords: kws, sessionHits, lifetimeHits },
-    () => {
-      // Notify the LinkedIn tab(s) so they rebuild patterns and rescan
-      chrome.tabs.query({ url: 'https://www.linkedin.com/*' }, tabs => {
-        for (const tab of tabs) {
-          chrome.tabs.sendMessage(tab.id, { action: 'keywordsUpdated', keywords: kws }, () => {
-            // Swallow lastError if no content script is present on that tab
-            void chrome.runtime.lastError;
-          });
-        }
-      });
-    },
-  );
-}
-
-function removeKeyword(kw) {
-  chrome.storage.local.get('keywords', ({ keywords = [] }) => {
-    const updated = keywords.filter(k => k !== kw);
-    saveKeywords(updated);
-    renderKeywords(updated);
-  });
-}
-
-function addKeyword() {
-  const kw = newKwInput.value.trim();
-  if (!kw) return;
-  chrome.storage.local.get('keywords', ({ keywords = [] }) => {
-    if (keywords.includes(kw)) { newKwInput.value = ''; return; }
-    const updated = [...keywords, kw];
-    saveKeywords(updated);
-    renderKeywords(updated);
-    newKwInput.value = '';
-  });
-}
-
-addBtn.addEventListener('click', addKeyword);
-newKwInput.addEventListener('keydown', e => { if (e.key === 'Enter') addKeyword(); });
-searchInput.addEventListener('input', () => renderKeywords(allKeywords));
 
 toggleInput.addEventListener('change', () => {
   withActiveTab(tab => {
@@ -139,24 +80,25 @@ toggleInput.addEventListener('change', () => {
 });
 
 // Load initial state
-chrome.storage.local.get(['hiddenCount', 'filterEnabled', 'keywords', 'sessionHits', 'lifetimeHits'], data => {
-  sessionHits  = data.sessionHits  ?? {};
-  lifetimeHits = data.lifetimeHits ?? {};
-  renderState({ hiddenCount: data.hiddenCount ?? 0, enabled: data.filterEnabled !== false });
-  renderKeywords(data.keywords ?? []);
+chrome.storage.local.get(
+  ['filterEnabled', 'sessionHits', 'lifetimeHits'],
+  data => {
+    sessionHits  = data.sessionHits  ?? {};
+    lifetimeHits = data.lifetimeHits ?? {};
+    renderState({ enabled: data.filterEnabled !== false });
+    renderKeywords();
 
-  if (data.hiddenCount === undefined) {
+    // Confirm we're on a LinkedIn tab; if not, disable the toggle.
     withActiveTab(tab => {
       if (!tab) return;
       chrome.tabs.sendMessage(tab.id, { action: 'getState' }, state => {
         if (chrome.runtime.lastError || !state) {
           status.textContent = 'Not on LinkedIn feed';
-          stat.textContent = '—';
           toggleInput.disabled = true;
           return;
         }
         renderState(state);
       });
     });
-  }
-});
+  },
+);

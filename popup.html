@@ -102,18 +102,6 @@
     .switch-sm input:checked + .slider { background: #0a66c2; }
     .switch-sm input:checked + .slider::before { transform: translateX(14px); }
 
-    #stat {
-      font-size: 14px;
-      font-weight: bold;
-      color: var(--c-stat);
-      margin: 0 0 4px;
-    }
-    #stat-label {
-      font-size: 12px;
-      color: var(--c-muted);
-      margin: 0 0 14px;
-    }
-
     .toggle-row {
       display: flex;
       align-items: center;
@@ -170,88 +158,51 @@
       letter-spacing: .04em;
     }
 
-    #keyword-list {
-      list-style: none;
-      margin: 0 0 8px;
-      padding: 0;
-      max-height: 140px;
-      overflow-y: auto;
-    }
-    #keyword-list li {
-      display: flex;
-      align-items: center;
-      font-size: 12px;
-      padding: 4px 0;
-      border-bottom: 1px solid var(--c-li-border);
-      color: var(--c-li-text);
-      gap: 4px;
-    }
-    #keyword-list li:last-child { border-bottom: none; }
-    #keyword-list li .kw-text { flex: 1; }
-    #keyword-list li .kw-count {
+    .kw-count {
       font-size: 11px;
       color: #fff;
       border-radius: 8px;
       padding: 1px 5px;
       min-width: 16px;
       text-align: center;
-      display: none;
+      display: inline-block;
+      box-sizing: border-box;
     }
-    #keyword-list li .kw-count.has-hits { display: inline-block; }
     .kw-count.session  { background: #0a66c2; }
     .kw-count.lifetime { background: var(--c-lifetime); }
-    #keyword-list button {
-      background: none;
-      border: none;
-      color: var(--c-rm-btn);
-      cursor: pointer;
-      font-size: 14px;
-      line-height: 1;
-      padding: 0 2px;
-    }
-    #keyword-list button:hover { color: var(--c-rm-hover); }
 
-    .add-row {
+    .filtered-intro {
+      font-size: 12px;
+      color: var(--c-muted);
+      margin: 0 0 8px;
+    }
+    .filtered-list {
       display: flex;
+      flex-wrap: wrap;
       gap: 6px;
     }
-    .add-row input {
-      flex: 1;
+    .filtered-list .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
       font-size: 12px;
-      padding: 5px 7px;
-      border: 1px solid var(--c-input-bdr);
-      border-radius: 5px;
-      outline: none;
-      background: var(--c-input-bg);
-      color: var(--c-input-fg);
+      padding: 2px 6px 2px 8px;
+      background: rgba(10,102,194,0.1);
+      color: #0a66c2;
+      border-radius: 10px;
+      border: 1px solid rgba(10,102,194,0.2);
     }
-    .add-row input::placeholder { color: var(--c-placeholder); }
-    .add-row input:focus { border-color: #0a66c2; }
-    .add-row button {
-      font-size: 18px;
-      line-height: 1;
-      padding: 0 8px;
-      background: #0a66c2;
-      color: #fff;
-      border: none;
-      border-radius: 5px;
-      cursor: pointer;
+    body.dark .filtered-list .pill {
+      background: rgba(10,102,194,0.2);
+      color: #6ea8e0;
     }
-    .add-row button:hover { background: #1476d1; }
-
-    #search-keyword {
-      width: 100%;
-      box-sizing: border-box;
-      font-size: 12px;
-      padding: 5px 7px;
-      border: 1px solid var(--c-input-bdr);
-      border-radius: 5px;
+    .filtered-list .pill .kw-count { font-size: 10px; padding: 0 4px; }
+    .filtered-list .legend-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
       margin-bottom: 6px;
-      outline: none;
-      background: var(--c-input-bg);
-      color: var(--c-input-fg);
     }
-    #search-keyword::placeholder { color: var(--c-placeholder); }
 
     #status {
       font-size: 11px;
@@ -264,29 +215,17 @@
 <body class="light">
   <div class="header-row">
     <h2>AI Leh</h2>
-    <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
-      <div class="night-row">
-        <span class="night-label">Night mode</span>
-        <label class="switch-sm">
-          <input type="checkbox" id="theme-toggle">
-          <span class="slider"></span>
-        </label>
-      </div>
-      <div class="night-row">
-        <span class="night-label">Show count on icon</span>
-        <label class="switch-sm">
-          <input type="checkbox" id="badge-toggle" checked>
-          <span class="slider"></span>
-        </label>
-      </div>
+    <div class="night-row">
+      <span class="night-label">Night mode</span>
+      <label class="switch-sm">
+        <input type="checkbox" id="theme-toggle">
+        <span class="slider"></span>
+      </label>
     </div>
   </div>
 
-  <div id="stat">—</div>
-  <div id="stat-label">posts hidden</div>
-
   <div class="toggle-row">
-    <span class="toggle-label">Show hidden content</span>
+    <span class="toggle-label">Stop hiding content</span>
     <label class="switch">
       <input type="checkbox" id="toggle">
       <span class="slider"></span>
@@ -295,19 +234,12 @@
 
   <hr>
 
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-    <h3>Keywords</h3>
-    <div style="display:flex;gap:6px;align-items:center;">
-      <span id="legend-session"  style="background:#0a66c2;color:#fff;border-radius:8px;padding:1px 6px;font-size:11px;">session</span>
-      <span id="legend-lifetime" style="background:var(--c-lifetime);color:#fff;border-radius:8px;padding:1px 6px;font-size:11px;">lifetime</span>
-    </div>
+  <p class="filtered-intro">Following words are being filtered out:</p>
+  <div class="legend-row">
+    <span id="legend-session"  class="kw-count session">session 0</span>
+    <span id="legend-lifetime" class="kw-count lifetime">lifetime 0</span>
   </div>
-  <input type="text" id="search-keyword" placeholder="Search…">
-  <ul id="keyword-list"></ul>
-  <div class="add-row">
-    <input type="text" id="new-keyword" placeholder="Add keyword…">
-    <button id="add-btn">+</button>
-  </div>
+  <div id="filtered-list" class="filtered-list"></div>
 
   <div id="status">Loading…</div>
   <script src="popup.js"></script>
